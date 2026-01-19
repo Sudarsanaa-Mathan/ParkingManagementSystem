@@ -1,0 +1,286 @@
+from fastapi import FastAPI, HTTPException
+from pydantic import BaseModel
+from fastapi.middleware.cors import CORSMiddleware
+
+
+from database import engine
+from models import parking_records
+
+from datetime import datetime
+from sqlalchemy.orm import Session
+from database import SessionLocal
+import re
+
+VEHICLE_REGEX = re.compile(r"^[A-Za-z]{2}\s*\d{2}\s*[A-Za-z]{2}\s*\d{4}$")
+
+def validate_vehicle_number(vehicle_no: str) -> str:
+    vehicle_no = vehicle_no.strip()
+
+    if not VEHICLE_REGEX.match(vehicle_no):
+        raise HTTPException(
+            status_code=400,
+            detail="Invalid vehicle number format. Expected: AA 00 BB 0000"
+        )
+
+    # Normalize (store consistently)
+    return vehicle_no.upper().replace(" ", "")
+
+
+parking_records.metadata.create_all(bind=engine)
+
+
+class EntryRequest(BaseModel):
+    car_number: str
+
+class ExitRequest(BaseModel):
+    car_number: str
+
+
+
+
+
+
+
+# ---------------- FASTAPI APP ----------------
+app = FastAPI(title="Parking Management System")
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # allow all for now
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+
+# ---------------- ORIGINAL VARIABLES ----------------
+rows = 6
+cols = 5
+
+matrix = []
+for i in range(1, rows + 1):
+    row = []
+    for j in range(1, cols + 1):
+        row.append(f"Lot{i}{j}")
+    matrix.append(row)
+
+lift_facilities = ['Lift1', 'Lift2']
+
+nearest_slots = {
+    "Lift1": ["Lot63", "Lot64", "Lot62", "Lot53", "Lot52", "Lot54"],
+    "Lift2": ["Lot13", "Lot14", "Lot12", "Lot23", "Lot22", "Lot24"]
+}
+
+lift1_priority2 = ["Lot61", "Lot51", "Lot65", "Lot55"]
+lift2_priority2 = ["Lot11", "Lot21", "Lot15", "Lot25"]
+
+occupancy_status = []
+for i in range(rows):
+    occupancy_status_row = []
+    for j in range(cols):
+        occupancy_status_row.append("Not Occupied")
+    occupancy_status.append(occupancy_status_row)
+
+# ---------------- ORIGINAL FUNCTIONS (UNCHANGED LOGIC) ----------------
+def has_free_slot(lift):
+    slots = nearest_slots[lift] + (lift1_priority2 if lift == "Lift1" else lift2_priority2)
+    for s in slots:
+        row = int(s[3]) - 1
+        col = int(s[4]) - 1
+        if occupancy_status[row][col] == "Not Occupied":
+            return True
+    return False
+
+
+def is_parking_full():
+    for i in range(rows):
+        for j in range(cols):
+            if occupancy_status[i][j] == "Not Occupied":
+                return False
+    return True
+
+
+def fun_allocate_nearest_slot(lift):
+    if lift == "Lift1":
+        slots = nearest_slots["Lift1"]
+        priority2 = lift1_priority2
+    else:
+        slots = nearest_slots["Lift2"]
+        priority2 = lift2_priority2
+
+    for s in slots:
+        row = int(s[3]) - 1
+        col = int(s[4]) - 1
+        if occupancy_status[row][col] == "Not Occupied":
+            occupancy_status[row][col] = "Occupied"
+            return s
+
+    for s in priority2:
+        row = int(s[3]) - 1
+        col = int(s[4]) - 1
+        if occupancy_status[row][col] == "Not Occupied":
+            occupancy_status[row][col] = "Occupied"
+            return s
+
+    return None
+
+
+def allocate_common_area():
+    for i in [3, 4]:
+        for j in range(1, 6):
+            row = i - 1
+            col = j - 1
+            if occupancy_status[row][col] == "Not Occupied":
+                occupancy_status[row][col] = "Occupied"
+                return f"Lot{i}{j}"
+    return None
+
+def fun_car_exit(slot_id):
+    if not slot_id or not slot_id.startswith("Lot"):
+        return
+
+    # Extract row & column safely
+    pos = slot_id.replace("Lot", "")
+
+    row = int(pos[0]) - 1
+    col = int(pos[1:]) - 1   # 🔥 THIS IS THE FIX
+
+    # Bounds check (prevents 500 forever)
+    if 0 <= row < rows and 0 <= col < cols:
+        occupancy_status[row][col] = "Not Occupied"
+
+
+
+
+
+# ---------------- REQUEST MODELS ----------------
+
+
+# ---------------- API ENDPOINTS ----------------
+
+@app.get("/")
+def home():
+    return {"status": "Parking system running"}
+
+
+@app.get("/parking/status")
+def parking_status():
+    return {
+        "matrix": matrix,
+        "occupancy_status": occupancy_status
+    }
+
+
+@app.post("/car/entry")
+def car_entry(req: EntryRequest):
+    db: Session = SessionLocal()
+    
+
+    try:
+        clean_car_number = validate_vehicle_number(req.car_number)
+        
+
+
+        existing = db.query(parking_records).filter(
+            parking_records.car_number == clean_car_number,
+            parking_records.status == "PARKED"
+        ).first()
+
+        if existing:
+            #db.close()
+            raise HTTPException(
+                status_code=400,
+                detail="Car already parked"
+            )
+
+        if is_parking_full():
+            #db.close()
+            raise HTTPException(status_code=400, detail="Parking Full")
+
+        slot = None
+        lift_used = None
+
+        if has_free_slot("Lift1"):
+            slot = fun_allocate_nearest_slot("Lift1")
+            lift_used = "Lift1"
+
+        elif has_free_slot("Lift2"):
+            slot = fun_allocate_nearest_slot("Lift2")
+            lift_used = "Lift2"
+
+        else:
+            slot = allocate_common_area()
+            lift_used = "COMMON"
+
+        if slot is None:
+            #db.close()
+            raise HTTPException(
+                status_code=400,
+                detail="No slots available"
+            )
+
+        record = parking_records(
+            car_number=clean_car_number,
+            slot_id=slot,
+            lift=lift_used,
+            entry_time=datetime.now(),
+            status="PARKED"
+        )
+
+        db.add(record)
+        db.commit()
+
+        #entry_time = record.entry_time  # store before close
+        #db.close()
+
+        return {
+            "car_number": clean_car_number,
+            "slot": slot,
+            "lift": lift_used,
+            "entry_time": record.entry_time
+        }
+    
+    except HTTPException:
+        raise   # rethrow clean API errors
+
+    except Exception as e:
+        print("🔥 ERROR in /car/entry:", repr(e))
+        raise HTTPException(status_code=500, detail="Internal Server Error")
+    
+    finally:
+        db.close()
+
+
+
+
+
+@app.post("/car/exit")
+def car_exit(req: ExitRequest):
+    db: Session = SessionLocal()
+
+    try:
+        clean_car_number = validate_vehicle_number(req.car_number)
+
+        record = db.query(parking_records).filter(
+            parking_records.car_number == clean_car_number,
+            parking_records.status == "PARKED"
+        ).first()
+
+        if not record:
+            raise HTTPException(status_code=404, detail="Car did not enter")
+
+        fun_car_exit(record.slot_id)
+
+        record.exit_time = datetime.now()
+        record.status = "EXITED"
+
+        db.commit()
+
+        return {
+            "car_number": clean_car_number,
+            "slot": record.slot_id,
+            "exit_time": record.exit_time
+        }
+
+    finally:
+        db.close()

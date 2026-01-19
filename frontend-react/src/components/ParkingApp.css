@@ -1,0 +1,169 @@
+body {
+  background: #f4f6f8;
+  font-family: Arial, sans-serif;
+}
+
+
+.dashboard {
+  display: flex;
+  gap: 16px;
+  margin: 20px 0;
+}
+
+.card {
+  flex: 1;
+  padding: 16px;
+  border-radius: 10px;
+  text-align: center;
+  box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+}
+
+.card h4 {
+  margin-bottom: 6px;
+  font-size: 14px;
+}
+
+.card p {
+  font-size: 22px;
+  font-weight: bold;
+}
+
+.card.total {
+  background: #eef2ff;
+}
+
+.card.free {
+  background: #e6f7ec;
+  color: #1b5e20;
+}
+
+.card.occupied {
+  background: #fdecea;
+  color: #8b0000;
+}
+
+
+.container {
+  max-width: 600px;
+  margin: 40px auto;
+  background: white;
+  padding: 20px;
+  border-radius: 8px;
+}
+
+input {
+  width: 80%;
+  padding: 10px;
+  font-size: 16px;
+}
+
+.buttons {
+  display: flex;
+  justify-content: space-between;
+  margin: 15px 0;
+}
+
+button {
+  width: 48%;
+  padding: 10px;
+  font-size: 16px;
+  cursor: pointer;
+}
+
+.entry { background: #4caf50; color: white; }
+.exit { background: #f44336; color: white; }
+
+.message {
+  margin-bottom: 15px;
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: repeat(5, 60px);
+  gap: 10px;
+  margin-top: 20px;
+}
+
+.legend {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 15px;
+  font-size: 14px;
+}
+
+.legend-item {
+  width: 16px;
+  height: 16px;
+  display: inline-block;
+  border-radius: 3px;
+}
+
+.slot {
+  height: 60px;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 600;
+  color: white;
+  border-radius: 6px;
+  font-size: 12px;
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+  cursor: pointer;
+}
+
+.slot:hover {
+  transform: scale(1.08);
+  box-shadow: 0 4px 10px rgba(0,0,0,0.15);
+}
+
+.slot.free {
+  background-color: #d4f7dc;
+  color: #1b5e20;
+}
+
+.slot.occupied {
+  background-color: #ffd6d6;
+  color: #8b0000;
+}
+
+.slot-id {
+  font-size: 12px;
+}
+
+
+.navbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 24px;
+  background: #0f172a;
+  color: white;
+}
+
+.brand {
+  font-size: 18px;
+  font-weight: bold;
+}
+
+.nav-search {
+  width: 260px;
+  padding: 8px 10px;
+  border-radius: 6px;
+  border: none;
+}
+
+.status {
+  font-size: 14px;
+}
+
+.status.online {
+  color: #4ade80;
+}
+
+.slot.highlight {
+  border: 3px solid #2563eb;
+  box-shadow: 0 0 12px rgba(37, 99, 235, 0.6);
+}
+

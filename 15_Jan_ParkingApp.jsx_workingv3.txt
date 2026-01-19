@@ -1,0 +1,164 @@
+import { useEffect, useState } from "react";
+import "./ParkingApp.css";
+
+const API_BASE = "http://127.0.0.1:8000";
+
+const VEHICLE_REGEX = /^[A-Za-z]{2}\s*\d{2}\s*[A-Za-z]{2}\s*\d{4}$/;
+
+function validateVehicleNumber(value) {
+  return VEHICLE_REGEX.test(value.trim());
+}
+
+
+
+export default function ParkingApp() {
+  const [carNumber, setCarNumber] = useState("");
+  const [grid, setGrid] = useState([]);
+  const [message, setMessage] = useState("");
+  const [freeCount, setFreeCount] = useState(0);
+  const [occupiedCount, setOccupiedCount] = useState(0);
+
+
+  useEffect(() => {
+    loadStatus();
+  }, []);
+async function loadStatus() {
+  const res = await fetch(`${API_BASE}/parking/status`);
+  const data = await res.json();
+
+  const gridData = data.occupancy_status;
+  setGrid(gridData);
+
+  let free = 0;
+  let occupied = 0;
+
+  gridData.forEach(row =>
+    row.forEach(cell => {
+      if (cell === "Occupied") occupied++;
+      else free++;
+    })
+  );
+
+  setFreeCount(free);
+  setOccupiedCount(occupied);
+}
+
+
+  async function carEntry() {
+    if (!validateVehicleNumber(carNumber)) {
+        setMessage("❌ Invalid vehicle number. Format: AA 00 BB 0000");
+        return;
+    }
+    const normalizedCar = carNumber.toUpperCase().replace(/\s+/g, "");
+
+
+    try {
+      const res = await fetch(`${API_BASE}/car/entry`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ car_number: normalizedCar })
+
+      });
+
+      const data = await res.json();
+      if (!res.ok) throw data;
+
+      setMessage(`✅ Parked at ${data.slot}`);
+      loadStatus();
+    } catch (e) {
+        setMessage(`❌ ${e?.detail ?? "Server error"}`);
+    }
+
+  }
+
+  async function carExit() {
+    if (!validateVehicleNumber(carNumber)) {
+        setMessage("❌ Invalid vehicle number. Format: AA 00 BB 0000");
+        return;
+    }
+    const normalizedCar = carNumber.toUpperCase().replace(/\s+/g, "");
+
+
+    try {
+      const res = await fetch(`${API_BASE}/car/exit`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ car_number: normalizedCar })
+
+      });
+
+      const data = await res.json();
+      if (!res.ok) throw data;
+
+      setMessage(`🚪 Exited from ${data.slot}`);
+      loadStatus();
+    } catch (e) {
+        setMessage(`❌ ${e?.detail ?? "Server error"}`);
+    }
+
+    }
+
+  return (
+    <div className="container">
+      <h2>🚗 Parking Management System</h2>
+
+      <div className="dashboard">
+        <div className="card total">
+            <h4>Total Slots</h4>
+            <p>{freeCount + occupiedCount}</p>
+        </div>
+
+        <div className="card free">
+            <h4>Free Slots</h4>
+            <p>{freeCount}</p>
+        </div>
+
+        <div className="card occupied">
+            <h4>Occupied Slots</h4>
+            <p>{occupiedCount}</p>
+            </div>
+       </div>
+
+
+      <input
+        placeholder="Car Number"
+        value={carNumber}
+        onChange={(e) => setCarNumber(e.target.value)}
+      />
+
+      <div className="buttons">
+        <button className="entry" onClick={carEntry}>Car Entry</button>
+        <button className="exit" onClick={carExit}>Car Exit</button>
+      </div>
+
+      <p className="message">{message}</p>
+      
+        <div className="legend">
+        <span><b>Legend:</b></span>
+        <span className="legend-item free"></span> Free
+        <span className="legend-item occupied"></span> Occupied
+        </div>
+
+
+      <div className="grid">
+        {grid.map((row, i) =>
+        row.map((cell, j) => {
+        const slotId = `Lot${i + 1}${j + 1}`;
+        const isOccupied = cell === "Occupied";
+
+        return (
+            <div
+            key={`${i}-${j}`}
+            className={`slot ${isOccupied ? "occupied" : "free"}`}
+            title={`${slotId} • ${isOccupied ? "Occupied" : "Free"}`}
+            >
+            <span className="slot-id">{slotId}</span>
+            </div>
+        );
+        })
+    )}
+    </div>
+
+    </div>
+  );
+}

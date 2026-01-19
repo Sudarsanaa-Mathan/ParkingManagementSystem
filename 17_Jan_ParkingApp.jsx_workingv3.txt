@@ -1,0 +1,248 @@
+import { useEffect, useState } from "react";
+import "./ParkingApp.css";
+
+const API_BASE = "http://localhost:8000";
+
+const VEHICLE_REGEX = /^[A-Za-z]{2}\s*\d{2}\s*[A-Za-z]{2}\s*\d{4}$/;
+
+function validateVehicleNumber(value) {
+  return VEHICLE_REGEX.test(value.trim());
+}
+
+
+
+export default function ParkingApp() {
+  const [carNumber, setCarNumber] = useState("");
+  const [grid, setGrid] = useState([]);
+  const [message, setMessage] = useState("");
+  const [freeCount, setFreeCount] = useState(0);
+  const [occupiedCount, setOccupiedCount] = useState(0);
+  const [highlightSlot, setHighlightSlot] = useState(null);
+
+
+
+  useEffect(() => {
+    loadStatus();
+  }, []);
+
+
+async function loadStatus() {
+  try {
+    const res = await fetch(`${API_BASE}/parking/status`);
+
+    console.log("STATUS CODE:", res.status);
+
+    const text = await res.text();
+    console.log("RAW RESPONSE:", text);
+
+    if (!res.ok) {
+      throw new Error(`HTTP ${res.status}`);
+    }
+
+    const data = JSON.parse(text);
+
+    if (!data.grid) {
+      throw new Error("Grid missing in response");
+    }
+
+    setGrid(data.grid);
+    setFreeCount(data.free_slots ?? 0);
+    setOccupiedCount(data.occupied_slots ?? 0);
+
+    setMessage(""); // clear error
+  } catch (e) {
+    console.error("LOAD STATUS ERROR:", e);
+    setMessage("❌ Failed to load parking status");
+  }
+}
+
+
+  async function carEntry() {
+    if (!validateVehicleNumber(carNumber)) {
+        setMessage("❌ Invalid vehicle number. Format: AA 00 BB 0000");
+        return;
+    }
+
+    const normalizedCar = carNumber.toUpperCase().replace(/\s+/g, "");
+
+
+    try {
+      const res = await fetch(`${API_BASE}/car/entry`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ car_number: normalizedCar })
+
+      });
+
+      const data = await res.json();
+      if (!res.ok) throw data;
+
+      setMessage(`✅ Parked at ${data.slot}`);
+      setHighlightSlot(data.slot);
+      loadStatus();
+    } catch (e) {
+      setMessage(e?.detail ?? "❌ Server error");
+    }
+  }
+
+  async function carExit() {
+    if (!validateVehicleNumber(carNumber)) {
+        setMessage("❌ Invalid vehicle number. Format: AA 00 BB 0000");
+        return;
+    }
+
+    const normalizedCar = carNumber.toUpperCase().replace(/\s+/g, "");
+
+
+    try {
+      const res = await fetch(`${API_BASE}/car/exit`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ car_number: normalizedCar })
+
+      });
+
+      const data = await res.json();
+      if (!res.ok) throw data;
+
+      setMessage(`🚪 Exited from ${data.slot}`);
+      setHighlightSlot(null);
+      loadStatus();
+    } catch (e) {
+      setMessage(e?.detail ?? "❌ Server error");
+    }
+  }
+
+
+  
+  async function searchVehicle() {
+  if (!validateVehicleNumber(carNumber)) {
+    setMessage("❌ Invalid vehicle number");
+    return;
+  }
+
+  const normalizedCar = carNumber.toUpperCase().replace(/\s+/g, "");
+
+  try {
+    const res = await fetch(
+      `${API_BASE}/car/search?car_number=${normalizedCar}`
+    );
+
+    const data = await res.json();
+    if (!res.ok) throw data;
+
+    setHighlightSlot(data.slot);
+    setMessage(`✅ Vehicle parked at ${data.slot}`);
+  } catch (e) {
+    setHighlightSlot(null);
+    setMessage("❌ Vehicle not found");
+  }
+}
+
+
+
+
+/* =======================
+     4️⃣ DERIVED VALUES
+  ======================= */
+  const totalSlots = freeCount + occupiedCount;
+  const utilization =
+    totalSlots === 0 ? 0 : ((occupiedCount / totalSlots) * 100).toFixed(1);
+
+  /* =======================
+     5️⃣ JSX
+  ======================= */
+  return (
+    <div className="container">
+
+      {/* 🔹 NAVBAR */}
+      <header className="navbar">
+        <div className="brand">🚘 Smart Parking</div>
+
+        <input
+          className="nav-search"
+          placeholder="Search vehicle (AA00BB0000)"
+          value={carNumber}
+          onChange={(e) => setCarNumber(e.target.value)}
+        />
+        <button onClick={searchVehicle}>🔍</button>
+        <div className="status online">● Online</div>
+      </header>
+
+      {/* 🔹 KPI DASHBOARD */}
+      <div className="dashboard">
+        <div className="card total">
+          <h4>Total Slots</h4>
+          <p>{totalSlots}</p>
+        </div>
+
+        <div className="card free">
+          <h4>Free Slots</h4>
+          <p>{freeCount}</p>
+        </div>
+
+        <div className="card occupied">
+          <h4>Occupied</h4>
+          <p>{occupiedCount}</p>
+        </div>
+
+        <div className="card utilization">
+          <h4>Utilization</h4>
+          <p>{utilization}%</p>
+        </div>
+      </div>
+
+      {/* 🔹 ACTION BUTTONS */}
+      <div className="buttons">
+        <button className="entry" onClick={carEntry}>Car Entry</button>
+        <button className="exit" onClick={carExit}>Car Exit</button>
+      </div>
+
+      <p className="message">{message}</p>
+
+      {/* 🔹 MAIN LAYOUT */}
+      <div className="main-layout">
+
+        {/* LEFT: PARKING GRID */}
+        <div className="left-panel">
+          <h3>Parking Grid</h3>
+
+          <div className="grid">
+            
+            
+            {grid.map((row, i) =>
+              row.map((cell, j) => {
+                const slotId = `Lot${i + 1}${j + 1}`;
+                return (
+                  <div
+                    key={`${i}-${j}`}
+                    className={`slot ${cell === "Occupied" ? "occupied" : "free"}
+                    ${highlightSlot === slotId ? "highlight" : ""}`}
+                  >
+                    {slotId}
+                  </div>
+                );
+              })
+            )}
+          </div>
+        </div>
+
+        {/* RIGHT: VEHICLE INFO */}
+        <div className="right-panel">
+          <h3>Vehicle Details</h3>
+
+          {highlightSlot ? (
+            <>
+              <p><b>Vehicle:</b> {carNumber}</p>
+              <p><b>Slot:</b> {highlightSlot}</p>
+              <p><b>Status:</b> Parked</p>
+            </>
+          ) : (
+            <p>No vehicle selected</p>
+          )}
+        </div>
+      </div>
+
+    </div>
+  );
+}
